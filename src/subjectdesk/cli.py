@@ -114,7 +114,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "status":
             for row in jobs(root):
-                print(f"{row['id']}\t{row['status']}\t{row['subject']}\t{row['source']}")
+                location = row["output_dir"] if row["status"] == "done" else row["source"]
+                print(f"{row['id']}\t{row['status']}\t{row['subject']}\t{location}")
                 if args.verbose and row["error"]:
                     print(f"  error: {row['error']}")
             return 0

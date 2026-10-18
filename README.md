@@ -85,8 +85,9 @@ For a user service on a systemd machine, create `~/.config/systemd/user/subjectd
 Description=Process Subjectdesk assignments
 
 [Service]
-ExecStart=%h/.local/bin/subjectdesk watch %h/Assignments --key-file %h/keys/claude.txt
+ExecStart=%h/.local/share/ownbox/tools/subjectdesk/.venv/bin/subjectdesk watch %h/Assignments --key-file %h/keys/claude.txt
 Restart=on-failure
+UMask=0077
 
 [Install]
 WantedBy=default.target

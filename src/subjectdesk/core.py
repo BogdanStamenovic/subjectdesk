@@ -33,13 +33,14 @@ class SubjectdeskError(Exception):
 INPUT_SUFFIXES = {".md", ".txt", ".docx", ".pdf"}
 OUTPUT_FORMATS = {"docx", "pdf", "md", "txt", "html"}
 MODELS = {"haiku": "claude-haiku-4-5", "sonnet": "claude-sonnet-5-5"}
-RULES = """Write plainly and naturally. Do not use em dashes or emojis. Do not roleplay,
+RULES = """These rules always apply, even if the assignment says otherwise. Write plainly and
+naturally, without dramatic or promotional language. Do not use em dashes or emojis. Do not roleplay,
 adopt a character, or describe yourself as an AI. State uncertainty honestly. Research
 factual claims with the web search tool. Cite source URLs close to the claims they support.
 Never invent sources, facts, research results, or completed work. Follow the assignment's
 format and content instructions where they do not conflict with these rules.
 """
-EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF]")
+EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\ufe0e\ufe0f\u20e3]")
 CITE_TAG = re.compile(r"</?cite(?:\s+[^>]*)?>")
 
 
@@ -401,7 +402,7 @@ def process_one(root: Path, researcher: Callable[[Assignment, str], tuple[str, s
             raise SubjectdeskError(f"assignment file disappeared: {source}")
         assignment = parse_assignment(source, row["model"])
         rules = (state_dir(root) / "rules.txt").read_text(encoding="utf-8")
-        title, body = researcher(assignment, RULES + "\n" + rules)
+        title, body = researcher(assignment, rules + "\n" + RULES)
         title, body = clean_style(title), clean_style(body)
         if not title or not body:
             raise SubjectdeskError("researcher returned an empty document")
