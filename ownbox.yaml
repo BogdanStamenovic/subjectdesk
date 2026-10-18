@@ -1,0 +1,17 @@
+schema: 1
+name: subjectdesk
+description: Turn subject-folder assignments into researched documents with Claude
+homepage: https://github.com/BogdanStamenovic/subjectdesk
+tags: [cli, assignments, research, documents, python]
+install:
+  platforms: [linux]
+  setup:
+    linux:
+      - uv venv .venv
+      - uv pip install --python .venv/bin/python .
+  update:
+    linux:
+      - uv pip install --python .venv/bin/python .
+  remove: []
+command:
+  linux: .venv/bin/subjectdesk
