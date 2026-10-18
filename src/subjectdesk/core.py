@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import html
 import json
 import os
@@ -52,6 +53,32 @@ class Assignment:
 
 def state_dir(root: Path) -> Path:
     return root / ".subjectdesk"
+
+
+@contextmanager
+def workspace_lock(root: Path) -> Iterator[None]:
+    lock_path = state_dir(root) / "watch.lock"
+    try:
+        with lock_path.open("a+") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise SubjectdeskError(f"another worker is using {root}") from exc
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+    except FileNotFoundError as exc:
+        raise SubjectdeskError(f"not initialized: {root}; run subjectdesk init first") from exc
+
+
+def requeue_interrupted(root: Path) -> int:
+    with connect(root) as db:
+        updated = db.execute(
+            "UPDATE jobs SET status='queued', error=NULL, updated_at=CURRENT_TIMESTAMP "
+            "WHERE status='running'"
+        )
+        return updated.rowcount
 
 
 def init(root: Path) -> None:

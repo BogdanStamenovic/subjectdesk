@@ -16,7 +16,18 @@ from pathlib import Path
 from typing import NoReturn
 
 from . import __version__
-from .core import MODELS, SubjectdeskError, discover, init, jobs, process_one, retry, scan_stable
+from .core import (
+    MODELS,
+    SubjectdeskError,
+    discover,
+    init,
+    jobs,
+    process_one,
+    requeue_interrupted,
+    retry,
+    scan_stable,
+    workspace_lock,
+)
 
 
 class _UsageError(Exception):
@@ -113,39 +124,43 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         _load_key(args.key_file)
         if args.command == "once":
-            added = discover(root, args.model)
-            if args.verbose:
-                log(f"discovered {len(added)} assignment(s)")
-            failures = _run_queued(root, log)
-            return 1 if failures else 0
+            with workspace_lock(root):
+                recovered = requeue_interrupted(root)
+                added = discover(root, args.model)
+                if args.verbose:
+                    log(f"discovered {len(added)} assignment(s); recovered {recovered}")
+                failures = _run_queued(root, log)
+                return 1 if failures else 0
         if args.poll_seconds <= 0:
             raise SubjectdeskError("--poll-seconds must be greater than zero")
         if args.max_workers < 1:
             raise SubjectdeskError("--max-workers must be at least one")
         seen: dict[str, tuple[int, int]] = {}
-        log(f"watching {root}")
-        with ThreadPoolExecutor(max_workers=args.max_workers) as pool:
-            active: set[Future[str | None]] = set()
-            while True:
-                added = scan_stable(root, seen, args.model)
-                if args.verbose and added:
-                    log(f"discovered {len(added)} assignment(s)")
-                for future in tuple(active):
-                    if not future.done():
-                        continue
-                    active.remove(future)
-                    job_id = future.result()
-                    if job_id is None:
-                        continue
-                    row = next(row for row in jobs(root) if row["id"] == job_id)
-                    if row["status"] == "failed":
-                        print(f"subjectdesk: {job_id}: {row['error']}", file=sys.stderr)
-                    else:
-                        log(f"completed {job_id}: {row['output_dir']}")
-                queued = sum(row["status"] == "queued" for row in jobs(root))
-                for _ in range(min(queued, args.max_workers - len(active))):
-                    active.add(pool.submit(process_one, root))
-                time.sleep(args.poll_seconds)
+        with workspace_lock(root):
+            recovered = requeue_interrupted(root)
+            log(f"watching {root}; recovered {recovered} interrupted job(s)")
+            with ThreadPoolExecutor(max_workers=args.max_workers) as pool:
+                active: set[Future[str | None]] = set()
+                while True:
+                    added = scan_stable(root, seen, args.model)
+                    if args.verbose and added:
+                        log(f"discovered {len(added)} assignment(s)")
+                    for future in tuple(active):
+                        if not future.done():
+                            continue
+                        active.remove(future)
+                        job_id = future.result()
+                        if job_id is None:
+                            continue
+                        row = next(row for row in jobs(root) if row["id"] == job_id)
+                        if row["status"] == "failed":
+                            print(f"subjectdesk: {job_id}: {row['error']}", file=sys.stderr)
+                        else:
+                            log(f"completed {job_id}: {row['output_dir']}")
+                    queued = sum(row["status"] == "queued" for row in jobs(root))
+                    for _ in range(min(queued, args.max_workers - len(active))):
+                        active.add(pool.submit(process_one, root))
+                    time.sleep(args.poll_seconds)
     except KeyboardInterrupt:
         return 0
     except SubjectdeskError as exc:

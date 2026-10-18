@@ -4,17 +4,21 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import pytest
 from docx import Document
 
 from subjectdesk.core import (
+    SubjectdeskError,
     claim,
     discover,
     init,
     jobs,
     parse_model_output,
     process_one,
+    requeue_interrupted,
     retry,
     scan_stable,
+    workspace_lock,
 )
 
 
@@ -82,3 +86,17 @@ def test_workers_claim_distinct_jobs(tmp_path: Path) -> None:
         claimed = list(pool.map(lambda _: claim(tmp_path), range(5)))
     assert all(row is not None for row in claimed)
     assert len({row["id"] for row in claimed if row is not None}) == 5
+
+
+def test_restart_requeues_interrupted_job_and_locks_workspace(tmp_path: Path) -> None:
+    init(tmp_path)
+    subject = tmp_path / "Art"
+    subject.mkdir()
+    (subject / "task.txt").write_text("Research pigments", encoding="utf-8")
+    discover(tmp_path)
+    with workspace_lock(tmp_path):
+        assert claim(tmp_path) is not None
+        with pytest.raises(SubjectdeskError, match="another worker"), workspace_lock(tmp_path):
+            pass
+    assert requeue_interrupted(tmp_path) == 1
+    assert jobs(tmp_path)[0]["status"] == "queued"

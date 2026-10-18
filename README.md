@@ -74,6 +74,8 @@ Every job gets the built-in rules plus `.subjectdesk/rules.txt`. The built-in ru
 
 The assignment is retained in its output folder. A failed job leaves the original assignment in place and records its error in SQLite. Use `status -v` and `retry` after fixing the issue. An interrupted `running` job can also be retried.
 
+On startup, `watch` and `once` automatically requeue jobs interrupted by a previous process. A workspace lock prevents two processing commands from running against the same workspace at once.
+
 ## Keep the watcher running
 
 For a user service on a systemd machine, create `~/.config/systemd/user/subjectdesk.service`:
